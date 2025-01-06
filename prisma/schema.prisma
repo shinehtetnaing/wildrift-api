@@ -24,7 +24,7 @@ enum Role {
 model Champion {
   id        String   @id @default(cuid())
   name      String   @unique
-  role      Role
+  role      Role[]
   imagePath String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
