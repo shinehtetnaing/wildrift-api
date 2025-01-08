@@ -1,4 +1,8 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  PutObjectCommand,
+  DeleteObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import crypto from "crypto";
 import express from "express";
 import multer from "multer";
@@ -89,6 +93,42 @@ router.post("/", upload.single("image"), async (req, res) => {
 
 router.put("/:id", (req, res) => {});
 
-router.delete("/:id", (req, res) => {});
+router.delete("/:name", async (req, res) => {
+  const { name } = req.params;
+  const capitalizedName =
+    name.charAt(1).toUpperCase() + name.slice(2).toLowerCase();
+
+  try {
+    const champion = await prisma.champion.findUnique({
+      where: {
+        name: capitalizedName,
+      },
+    });
+
+    if (!champion) {
+      return res.status(404).json({ error: "Champion not found" });
+    }
+
+    const key = champion.imagePath.split("amazonaws.com/")[1];
+
+    const command = new DeleteObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: key,
+    });
+
+    await s3.send(command);
+
+    await prisma.champion.delete({
+      where: {
+        id: champion.id,
+      },
+    });
+
+    res.status(200).json({ message: "Champion deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting champion:", error);
+    res.status(500).json({ error: "Failed to delete champion" });
+  }
+});
 
 export default router;
