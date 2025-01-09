@@ -19,9 +19,28 @@ const s3 = new S3Client({
   },
 });
 
-router.get("/", (req, res) => {});
+router.get("/", async (req, res) => {
+  const champions = await prisma.champion.findMany();
+  res.json(champions);
+});
 
-router.get("/:id", (req, res) => {});
+router.get("/:name", async (req, res) => {
+  const { name } = req.params;
+  const capitalizedName =
+    name.charAt(1).toUpperCase() + name.slice(2).toLowerCase();
+
+  const champion = await prisma.champion.findUnique({
+    where: {
+      name: capitalizedName,
+    },
+  });
+
+  if (!champion) {
+    return res.status(404).json({ error: "Champion not found" });
+  }
+
+  res.json(champion);
+});
 
 router.post("/", upload.single("image"), async (req, res) => {
   const { name, role } = req.body;
