@@ -110,7 +110,101 @@ router.post("/", upload.single("image"), async (req, res) => {
   }
 });
 
-router.put("/:id", (req, res) => {});
+router.put("/:name", upload.single("image"), async (req, res) => {
+  const { name } = req.params;
+  const { name: newName, role } = req.body;
+  const capitalizedName =
+    name.charAt(1).toUpperCase() + name.slice(2).toLowerCase();
+
+  try {
+    const champion = await prisma.champion.findUnique({
+      where: {
+        name: capitalizedName,
+      },
+    });
+
+    if (!champion) {
+      return res.status(404).json({ error: "Champion not found" });
+    }
+
+    let imageUrl = champion.imagePath; // Keep existing image path if no new image
+
+    // Handle image update if a new file is provided
+    if (req.file) {
+      const acceptedMimeTypes = [
+        "image/png",
+        "image/jpg",
+        "image/jpeg",
+        "image/webp",
+      ];
+      if (!acceptedMimeTypes.includes(req.file.mimetype)) {
+        return res.status(403).json({ error: "Invalid file type" });
+      }
+
+      const maxFileSize = 1024 * 1024 * 5; // 5MB
+      if (req.file.size > maxFileSize) {
+        return res.status(403).json({ error: "File is too large" });
+      }
+
+      // Delete the existing image from S3
+      const existingKey = champion.imagePath.split("amazonaws.com/")[1];
+      const deleteCommand = new DeleteObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: existingKey,
+      });
+      await s3.send(deleteCommand);
+
+      // Upload the new image to S3
+      const uniqueFilename = crypto.randomBytes(16).toString("hex");
+      const fileExtension = req.file.mimetype.split("/")[1];
+      const newKey = `${
+        req.file.originalname.split(".")[0]
+      }-${uniqueFilename}.${fileExtension}`;
+
+      const uploadCommand = new PutObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: newKey,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+        ContentLength: req.file.size,
+      });
+
+      await s3.send(uploadCommand);
+
+      // Generate new file URL
+      imageUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_BUCKET_REGION}.amazonaws.com/${newKey}`;
+    }
+
+    // Validate roles if provided
+    let roleArray = champion.role; // Keep existing roles if not provided
+    if (role) {
+      roleArray = role.split(",").map((r) => r.trim());
+      const validRoles = ["SOLO", "JUNGLE", "MID", "ADC", "SUPPORT"];
+      if (!roleArray.every((r) => validRoles.includes(r))) {
+        return res.status(400).json({ error: "Invalid role(s) provided" });
+      }
+    }
+
+    // Update champion in the database
+    const updatedChampion = await prisma.champion.update({
+      where: {
+        name: capitalizedName,
+      },
+      data: {
+        name: newName || champion.name,
+        role: roleArray,
+        imagePath: imageUrl,
+      },
+    });
+
+    res
+      .status(200)
+      .json({ message: "Champion updated successfully", updatedChampion });
+  } catch (error) {
+    console.error("Error updating champion:", error);
+    res.status(500).json({ error: "Failed to update champion" });
+  }
+});
 
 router.delete("/:name", async (req, res) => {
   const { name } = req.params;
