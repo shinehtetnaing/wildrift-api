@@ -1,6 +1,6 @@
 import {
-  PutObjectCommand,
   DeleteObjectCommand,
+  PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import crypto from "crypto";
@@ -20,8 +20,32 @@ const s3 = new S3Client({
 });
 
 router.get("/", async (req, res) => {
-  const champions = await prisma.champion.findMany();
-  res.json(champions);
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const offset = (page - 1) * limit;
+
+    const champions = await prisma.champion.findMany({
+      skip: offset,
+      take: limit,
+    });
+
+    const totalChampions = await prisma.champion.count();
+
+    const totalPages = Math.ceil(totalChampions / limit);
+
+    res.json({
+      page,
+      limit,
+      totalPages,
+      totalChampions,
+      champions,
+    });
+  } catch (error) {
+    console.error("Error fetching champions:", error);
+    res.status(500).json({ error: "Failed to fetch champions" });
+  }
 });
 
 router.get("/:name", async (req, res) => {
