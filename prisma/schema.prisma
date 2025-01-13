@@ -21,6 +21,14 @@ enum Role {
   SUPPORT
 }
 
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Champion {
   id        String   @id @default(cuid())
   name      String   @unique
